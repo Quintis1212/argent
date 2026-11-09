@@ -83,6 +83,14 @@ const DEVICES: FakeDevice[] = [
 /** One app on both devices, as when one project runs on iOS and Android. */
 const APP_ID = "com.example.app";
 
+let refuseNextUpgrade = false;
+
+function admitUpgrade(): boolean {
+  if (!refuseNextUpgrade) return true;
+  refuseNextUpgrade = false;
+  return false;
+}
+
 function handleCDPMessage(ws: WebSocket, raw: string, logicalDeviceId: string | null) {
   const { id, method } = JSON.parse(raw) as { id: number; method: string };
   switch (method) {
@@ -147,7 +155,7 @@ async function startFakeMetro(devices: FakeDevice[]): Promise<FakeMetro> {
     res.statusCode = 404;
     res.end("Not found");
   });
-  const wss = new WebSocketServer({ server });
+  const wss = new WebSocketServer({ server, verifyClient: admitUpgrade });
   wss.on("connection", (ws, req) => {
     const logicalDeviceId = new URL(req.url ?? "/", "http://localhost").searchParams.get("device");
     ws.on("message", (raw) => handleCDPMessage(ws, raw.toString(), logicalDeviceId));
@@ -238,13 +246,16 @@ describe("multi-device debugger routing (mock Metro, two devices)", () => {
     ).rejects.toThrow(`already connected as "${SIM_C}"`);
   });
 
-  it("does not offer another device's live session to a same-named simulator", async () => {
+  it("offers another device's live session to a same-named simulator only on a condition", async () => {
     await registry.invokeTool("debugger-connect", { port: mockPort, device_id: SIM_C });
     const error = await registry
       .invokeTool("debugger-connect", { port: mockPort, device_id: SIM_C_NAMESAKE })
       .catch((e: Error) => e);
     expect((error as Error).message).toMatch(/would evict that session/);
     expect((error as Error).message).not.toMatch(/Pass device_id/);
+    expect((error as Error).message).toContain(
+      `If that app runs on "${SIM_C_NAMESAKE}", pass device_id "${SIM_C}"`
+    );
   });
 
   it("records the app and platform each runtime reports, which Metro's list does not carry", async () => {
@@ -298,11 +309,20 @@ describe("debugger routing on a Metro serving one device", () => {
     );
   });
 
-  it("does not offer a logical-keyed session to a device reached by the fallback", async () => {
+  it("offers a logical-keyed session to a device reached by the fallback only on a condition", async () => {
     await connect("logical-solo");
     const message = await refusalOf("emulator-5556");
     expect(message).toMatch(/would evict that session/);
     expect(message).not.toMatch(/Pass device_id/);
+    expect(message).toContain(`If that app runs on "emulator-5556", pass device_id "logical-solo"`);
+  });
+
+  it("frees the target when a connect fails during setup", async () => {
+    refuseNextUpgrade = true;
+    await expect(connect(SOLO_SIM)).rejects.toThrow();
+    await expect(connect("logical-solo")).resolves.toMatchObject({
+      logicalDeviceId: "logical-solo",
+    });
   });
 
   it("points a bare UDID at the session its ext: spelling holds", async () => {
@@ -319,6 +339,9 @@ describe("debugger routing on a Metro serving one device", () => {
       await connect("logical-solo");
       const result = (await connect(UNLISTED_SIM, other.port)) as Record<string, unknown>;
       expect(result.logicalDeviceId).toBe("logical-solo");
+      await expect(connect("logical-solo")).resolves.toMatchObject({
+        logicalDeviceId: "logical-solo",
+      });
     } finally {
       await soloRegistry.dispose();
       await other.close();

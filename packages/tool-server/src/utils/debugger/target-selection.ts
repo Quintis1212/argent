@@ -182,7 +182,10 @@ function matchByDeviceName(
     throw failure(
       `device_id "${deviceId}" is the simulator "${hint.name}", and ${hint.bootedTwins} other ` +
         `booted simulator(s) have the same name, so Metro on port ${port} cannot tell them apart. ` +
-        `Rename the simulators so each name is unique (xcrun simctl rename <udid> <name>), ` +
+        `Connected under that name: ${describeDevices(matched, true).listed}. If you know which ` +
+        `of these apps runs on "${deviceId}" (for example by its bundle id), pass its ` +
+        `logicalDeviceId in parentheses. Otherwise rename the simulators so each name is unique ` +
+        `(xcrun simctl rename <udid> <name>), ` +
         `then shut down and boot each renamed simulator, since an app keeps reporting the name ` +
         `its simulator booted with. Relaunch the app, then retry.`,
       FAILURE_CODES.DEBUGGER_TARGET_DEVICE_MISMATCH

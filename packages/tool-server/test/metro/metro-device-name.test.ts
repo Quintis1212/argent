@@ -16,6 +16,7 @@ let hostedFails = false;
 let providerDevices: Array<{ platform: "ios" | "android"; deviceSet?: string }> = [];
 /** A wedged simctl behind the device-set probe, which has its own longer timeout. */
 let deviceSetProbeHangs = false;
+let deviceSetProbeDelayMs = 0;
 
 vi.mock("node:child_process", async () => {
   const actual = await vi.importActual<typeof import("node:child_process")>("node:child_process");
@@ -54,10 +55,16 @@ vi.mock("../../src/utils/ios-device-sets", async () => {
   );
   return {
     ...actual,
-    deviceSetForUdid: () => (deviceSetProbeHangs ? new Promise(() => {}) : Promise.resolve(ownSet)),
+    deviceSetForUdid: () => probeDeviceSet(),
     configuredAdditionalDeviceSets: () => additionalSets,
   };
 });
+
+function probeDeviceSet(): Promise<string | null> {
+  if (deviceSetProbeHangs) return new Promise(() => {});
+  if (!deviceSetProbeDelayMs) return Promise.resolve(ownSet);
+  return new Promise((resolve) => setTimeout(() => resolve(ownSet), deviceSetProbeDelayMs));
+}
 
 vi.mock("../../src/utils/external-devices", async () => {
   const actual = await vi.importActual<typeof import("../../src/utils/external-devices")>(
@@ -95,6 +102,7 @@ beforeEach(() => {
   hostedFails = false;
   providerDevices = [];
   deviceSetProbeHangs = false;
+  deviceSetProbeDelayMs = 0;
   simctlDevices = {
     "com.apple.CoreSimulator.SimRuntime.iOS-18-5": [
       { udid: UDID_A, name: "iPhone 16 Pro", state: "Booted" },
@@ -221,6 +229,18 @@ describe("metroDeviceNamesFor", () => {
       const hint = metroDeviceNamesFor(UDID_A);
       await vi.advanceTimersByTimeAsync(5000);
       await expect(hint).resolves.toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still gives a hint for a lookup that finishes within its deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      deviceSetProbeDelayMs = 4900;
+      const hint = metroDeviceNamesFor(UDID_A);
+      await vi.advanceTimersByTimeAsync(4900);
+      await expect(hint).resolves.toMatchObject({ name: "iPhone 16 Pro" });
     } finally {
       vi.useRealTimers();
     }

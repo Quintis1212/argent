@@ -24,13 +24,17 @@ const logicalIdToConnectId = new Map<string, string>();
 
 /**
  * Record that `logicalDeviceId` names the same device as `connectDeviceId`.
- * No-op when the two are equal, or when there is no logicalDeviceId (Vega).
+ * No-op when the two are equal, when there is no logicalDeviceId (Vega), or
+ * when a live session is keyed by that logicalDeviceId itself: the alias applies
+ * on every Metro port, so it would reroute that session's calls (on another
+ * Metro the app also connected to) to `connectDeviceId`.
  */
 export function rememberDeviceAlias(
   logicalDeviceId: string | undefined,
   connectDeviceId: string
 ): void {
   if (!logicalDeviceId || logicalDeviceId === connectDeviceId) return;
+  if (isLogicalKeyedDevice(logicalDeviceId)) return;
   logicalIdToConnectId.set(logicalDeviceId, connectDeviceId);
 }
 

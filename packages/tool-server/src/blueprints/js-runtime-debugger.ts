@@ -176,8 +176,9 @@ function sameDevice(a: string, b: string): boolean {
 
 /**
  * Refuse a connect that would evict the live session on the selected target.
- * Only point the caller at that session when `deviceId` is known to be its
- * device; otherwise the target may be another device's app.
+ * Only point the caller at that session outright when `deviceId` is known to be
+ * its device; otherwise the target may be another device's app, so offer it
+ * only on that condition.
  */
 function liveSessionConflict(
   deviceId: string,
@@ -193,7 +194,9 @@ function liveSessionConflict(
       `Metro port ${port}. Pass device_id "${liveSessionId}" to keep using that session.`
     : `No app on Metro port ${port} is known to belong to device_id "${deviceId}", and the ` +
       `app it would attach to is already debugged as "${liveSessionId}", so connecting would ` +
-      `evict that session. Connect the app on "${deviceId}" to this Metro, then retry.`;
+      `evict that session. If that app runs on "${deviceId}", pass device_id ` +
+      `"${liveSessionId}" to use that session; otherwise connect the app on "${deviceId}" to ` +
+      `this Metro, then retry.`;
   return new FailureError(message, {
     error_code: FAILURE_CODES.DEBUGGER_TARGET_DEVICE_MISMATCH,
     failure_stage: "debugger_select_target",

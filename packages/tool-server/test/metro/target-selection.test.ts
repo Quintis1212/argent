@@ -274,7 +274,8 @@ describe("selectTarget by simulator UDID (device name hint)", () => {
     );
     expect(f.code).toBe(FAILURE_CODES.DEBUGGER_TARGET_DEVICE_MISMATCH);
     expect(f.message).toMatch(/same name/);
-    expect(f.message).not.toContain("bbb");
+    expect(f.message).toContain("Connected under that name: com.example.app (bbb).");
+    expect(f.message).not.toContain("aaa");
   });
 
   it("matches the name the way Metro parses it", () => {
@@ -313,6 +314,23 @@ describe("selectTarget by simulator UDID (device name hint)", () => {
     expect(f.code).toBe(FAILURE_CODES.DEBUGGER_TARGET_DEVICE_MISMATCH);
     expect(f.message).toContain("com.example.app (bbb)");
     expect(f.message).toContain("com.example.app.staging (ccc)");
+  });
+
+  it("lists the apps of a simulator with two apps when a same-named one is booted elsewhere", () => {
+    const staging = makeTarget({
+      ...b,
+      id: "b2",
+      appId: "com.example.app.staging",
+      reactNative: { logicalDeviceId: "ccc" },
+    });
+    const f = failureOf(() =>
+      selectTarget([b, staging], 8081, {
+        deviceId: "UDID-B",
+        deviceNames: hint("bench-ARG-B", { bootedTwins: 1 }),
+      })
+    );
+    expect(f.message).toMatch(/same name/);
+    expect(f.message).toContain("com.example.app (bbb), com.example.app.staging (ccc)");
   });
 
   it("names the bundle id from description on inspector-proxies that list no appId", () => {
